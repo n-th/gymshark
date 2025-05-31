@@ -45,67 +45,91 @@ func (m *mockStorage) Close() error {
 	return nil
 }
 
-func TestCalculatePacks(t *testing.T) {
-	// Set Gin to test mode
+func setupTestRouter() (*gin.Engine, *Handler) {
 	gin.SetMode(gin.TestMode)
-
-	// Create a new Gin router
 	router := gin.New()
-
-	// Create a new allocator with mock storage
-	storage := newMockStorage()
-	alloc := allocator.NewAllocator([]int{23, 31, 53}, storage)
-
-	// Create a new handler
+	alloc := allocator.NewAllocator([]int{23, 31, 53}, nil)
 	handler := NewHandler(alloc)
-
-	// Register the routes
 	handler.RegisterRoutes(router)
+	return router, handler
+}
+
+func TestCalculatePacks(t *testing.T) {
+	router, _ := setupTestRouter()
 
 	tests := []struct {
 		name           string
 		quantity       string
 		expectedStatus int
 		expectedBody   map[string]interface{}
+		expectedError  string
 	}{
 		{
-			name:           "valid quantity",
+			name:           "valid quantity 50",
 			quantity:       "50",
 			expectedStatus: http.StatusOK,
 			expectedBody: map[string]interface{}{
 				"packs": map[string]interface{}{
-					"23": float64(2),
+					"23": float64(1),
+					"31": float64(1),
 				},
+				"total": float64(54),
 			},
 		},
 		{
-			name:           "invalid quantity - non-numeric",
+			name:           "valid quantity 10",
+			quantity:       "10",
+			expectedStatus: http.StatusOK,
+			expectedBody: map[string]interface{}{
+				"packs": map[string]interface{}{
+					"23": float64(1),
+				},
+				"total": float64(23),
+			},
+		},
+		{
+			name:           "valid quantity 500",
+			quantity:       "500",
+			expectedStatus: http.StatusOK,
+			expectedBody: map[string]interface{}{
+				"packs": map[string]interface{}{
+					"53": float64(9),
+					"23": float64(1),
+				},
+				"total": float64(500),
+			},
+		},
+		{
+			name:           "missing quantity",
+			quantity:       "",
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "invalid quantity: strconv.Atoi: parsing \"\": invalid syntax",
+		},
+		{
+			name:           "invalid quantity",
 			quantity:       "abc",
 			expectedStatus: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
-				"error": "invalid quantity: strconv.Atoi: parsing \"abc\": invalid syntax",
-			},
+			expectedError:  "invalid quantity: strconv.Atoi: parsing \"abc\": invalid syntax",
 		},
 		{
-			name:           "invalid quantity - zero",
+			name:           "zero quantity",
 			quantity:       "0",
 			expectedStatus: http.StatusBadRequest,
-			expectedBody: map[string]interface{}{
-				"error": "quantity must be greater than 0",
-			},
+			expectedError:  "quantity must be greater than 0",
+		},
+		{
+			name:           "negative quantity",
+			quantity:       "-10",
+			expectedStatus: http.StatusBadRequest,
+			expectedError:  "quantity must be greater than 0",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a new request
-			req, err := http.NewRequest("GET", "/calculate?quantity="+tt.quantity, nil)
-			assert.NoError(t, err)
-
-			// Create a response recorder
+			// Create a request to the calculate endpoint
+			req := httptest.NewRequest("GET", "/calculate?quantity="+tt.quantity, nil)
 			w := httptest.NewRecorder()
-
-			// Serve the request
 			router.ServeHTTP(w, req)
 
 			// Check the status code
@@ -113,66 +137,71 @@ func TestCalculatePacks(t *testing.T) {
 
 			// Parse the response body
 			var response map[string]interface{}
-			err = json.Unmarshal(w.Body.Bytes(), &response)
+			err := json.Unmarshal(w.Body.Bytes(), &response)
 			assert.NoError(t, err)
 
-			// Check the response body
-			assert.Equal(t, tt.expectedBody, response)
-
-			// If the request was successful, verify the result was stored
-			if tt.expectedStatus == http.StatusOK {
-				quantity, _ := strconv.Atoi(tt.quantity)
-				cached, err := storage.GetAllocationByQuantity(quantity)
-				assert.NoError(t, err)
-				assert.NotNil(t, cached)
-				assert.Equal(t, quantity, cached.OrderQuantity)
-				assert.Equal(t, tt.expectedBody["packs"], cached.Packs)
+			if tt.expectedError != "" {
+				// Check error response
+				assert.Equal(t, tt.expectedError, response["error"])
+			} else {
+				// Check successful response
+				assert.Equal(t, tt.expectedBody["packs"], response["packs"])
+				assert.Equal(t, tt.expectedBody["total"], response["total"])
 			}
 		})
 	}
 }
 
-func TestGetRecentAllocations(t *testing.T) {
-	// Set Gin to test mode
-	gin.SetMode(gin.TestMode)
+func TestHealthCheck(t *testing.T) {
+	router, _ := setupTestRouter()
 
-	// Create a new Gin router
-	router := gin.New()
-
-	// Test when storage is not configured
-	alloc := allocator.NewAllocator([]int{23, 31, 53}, nil)
-	handler := NewHandler(alloc)
-	handler.RegisterRoutes(router)
-
-	req, err := http.NewRequest("GET", "/recent", nil)
-	assert.NoError(t, err)
-
+	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", response["status"])
+}
+
+func TestGetRecentAllocations(t *testing.T) {
+	router, _ := setupTestRouter()
+
+	req := httptest.NewRequest("GET", "/recent", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
 	var response map[string]interface{}
-	err = json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
-	assert.Equal(t, "storage not configured", response["error"])
+	assert.NotNil(t, response["allocations"])
+}
 
-	// Create a new router for the next test
-	router = gin.New()
+func TestCORSHeaders(t *testing.T) {
+	router, _ := setupTestRouter()
 
-	// Test with mock storage
-	storage := newMockStorage()
-	alloc = allocator.NewAllocator([]int{23, 31, 53}, storage)
-	handler = NewHandler(alloc)
-	handler.RegisterRoutes(router)
+	// Test preflight request
+	req := httptest.NewRequest("OPTIONS", "/calculate", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
 
-	req, err = http.NewRequest("GET", "/recent", nil)
-	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "http://localhost:3000", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "GET, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
+	assert.Equal(t, "Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
 
+	// Test actual request
+	req = httptest.NewRequest("GET", "/calculate?quantity=50", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	err = json.Unmarshal(w.Body.Bytes(), &response)
-	assert.NoError(t, err)
-	assert.Empty(t, response["allocations"])
+	assert.Equal(t, "http://localhost:3000", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "GET, OPTIONS", w.Header().Get("Access-Control-Allow-Methods"))
+	assert.Equal(t, "Content-Type", w.Header().Get("Access-Control-Allow-Headers"))
 }

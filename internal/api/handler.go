@@ -56,6 +56,17 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 // @Failure 400 {object} map[string]string "Error message"
 // @Router /calculate [get]
 func (h *Handler) calculatePacks(c *gin.Context) {
+	// Add CORS headers
+	c.Header("Access-Control-Allow-Origin", "http://localhost:3000")
+	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+	c.Header("Access-Control-Allow-Headers", "Content-Type")
+
+	// Handle preflight requests
+	if c.Request.Method == http.MethodOptions {
+		c.Status(http.StatusOK)
+		return
+	}
+
 	quantityStr := c.Query("quantity")
 	quantity, err := strconv.Atoi(quantityStr)
 	if err != nil {
@@ -65,7 +76,7 @@ func (h *Handler) calculatePacks(c *gin.Context) {
 		return
 	}
 
-	packs, _, err := h.allocator.CalculatePacks(quantity)
+	packs, total, err := h.allocator.CalculatePacks(quantity)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -75,6 +86,7 @@ func (h *Handler) calculatePacks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"packs": packs,
+		"total": total,
 	})
 }
 
