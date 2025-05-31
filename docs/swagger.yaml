@@ -1,0 +1,77 @@
+basePath: /
+host: localhost:8080
+info:
+  contact: {}
+  description: A Go-based API service that calculates optimal pack distribution for
+    fulfilling orders with fixed pack sizes.
+  title: Smart Pack Allocation API
+  version: "1.0"
+paths:
+  /calculate:
+    get:
+      consumes:
+      - application/json
+      description: Calculate the optimal pack distribution for a given quantity
+      parameters:
+      - description: Order quantity
+        in: query
+        name: quantity
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Pack distribution
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Error message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Calculate pack distribution
+      tags:
+      - packs
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Check if the service is healthy
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Health status
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+  /recent:
+    get:
+      consumes:
+      - application/json
+      description: Get the most recent pack allocations
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Recent allocations
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Error message
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get recent allocations
+      tags:
+      - packs
+swagger: "2.0"

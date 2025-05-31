@@ -1,0 +1,8 @@
+pack_sizes:
+  - 23
+  - 31
+  - 53
+
+server:
+  port: 8080
+  host: "0.0.0.0"
