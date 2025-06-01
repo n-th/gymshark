@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +33,7 @@ func (m *mockStorage) StoreAllocation(quantity int, packs map[int]int, total int
 }
 
 func (m *mockStorage) GetRecentAllocations(limit int) ([]storage.Allocation, error) {
-	return nil, nil
+	return []storage.Allocation{}, nil
 }
 
 func (m *mockStorage) GetAllocationByQuantity(quantity int) (*storage.Allocation, error) {
@@ -48,7 +47,8 @@ func (m *mockStorage) Close() error {
 func setupTestRouter() (*gin.Engine, *Handler) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	alloc := allocator.NewAllocator([]int{23, 31, 53}, nil)
+	storage := newMockStorage()
+	alloc := allocator.NewAllocator([]int{23, 31, 53}, storage)
 	handler := NewHandler(alloc)
 	handler.RegisterRoutes(router)
 	return router, handler

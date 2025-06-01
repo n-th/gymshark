@@ -1,9 +1,5 @@
-// Package allocator provides functionality for calculating optimal pack distributions
-// for fulfilling orders with fixed pack sizes.
-//
-// The package implements a smart algorithm that determines the most efficient
-// combination of pack sizes to fulfill an order quantity while minimizing waste.
-// It also includes persistence capabilities for storing and retrieving allocation results.
+// Package allocator provides optimal pack distribution calculation
+// to fulfill order quantities using fixed pack sizes.
 package allocator
 
 import (
@@ -14,64 +10,38 @@ import (
 	"github.com/n-th/gymshark/internal/storage"
 )
 
-// Common errors
 var (
 	ErrInvalidQuantity      = errors.New("quantity must be greater than 0")
 	ErrStorageNotConfigured = errors.New("storage not configured")
 )
 
-// Pack represents a pack size and its quantity
 type Pack struct {
 	Size     int
 	Quantity int
 }
 
-// Allocator handles pack size calculations and result persistence.
-// It maintains a sorted list of available pack sizes and can store
-// calculation results in a persistent storage.
 type Allocator struct {
 	packSizes []int
 	storage   storage.Storage
 }
 
-// NewAllocator creates a new Allocator instance with the specified pack sizes.
-// The pack sizes are sorted in ascending order for optimal calculation.
-// If storage is provided, calculation results will be persisted.
-func NewAllocator(packSizes []int, storage storage.Storage) *Allocator {
-	// Create a copy of pack sizes to avoid modifying the input slice
-	sizes := make([]int, len(packSizes))
-	copy(sizes, packSizes)
-
-	// Sort pack sizes in ascending order
-	sort.Ints(sizes)
-
-	return &Allocator{
-		packSizes: sizes,
-		storage:   storage,
+func NewAllocator(packSizes []int, s storage.Storage) *Allocator {
+	if packSizes == nil {
+		packSizes = []int{}
 	}
+	sizes := append([]int(nil), packSizes...)
+	sort.Sort(sort.Reverse(sort.IntSlice(sizes)))
+	return &Allocator{packSizes: sizes, storage: s}
 }
 
-// CalculatePacks determines the optimal distribution of packs for a given quantity.
-// It returns a map of pack sizes to quantities, the total number of items,
-// and any error that occurred during calculation.
-//
-// The algorithm works as follows:
-// 1. For each possible combination of pack sizes, calculate the total items
-// 2. Choose the combination that minimizes waste while meeting or exceeding the order quantity
-// 3. If multiple combinations have the same waste, prefer the one with fewer total packs
-//
-// Example:
-//
-//	alloc := NewAllocator([]int{23, 31, 53}, nil)
-//	packs, total, err := alloc.CalculatePacks(50)
-//	// packs: map[23:1 31:1]
-//	// total: 54
-func (a *Allocator) CalculatePacks(quantity int) (map[int]int, int, error) {
+// CalculatePacksOptimized calculates the optimal pack distribution for a given quantity
+// using the stored pack sizes.
+// It returns the pack distribution, the total quantity, and an error if the quantity is invalid.
+func (a *Allocator) CalculatePacksOptimized(quantity int) (map[int]int, int, error) {
 	if quantity <= 0 {
 		return nil, 0, ErrInvalidQuantity
 	}
 
-	// If we have storage, check for cached result
 	if a.storage != nil {
 		if cached, err := a.storage.GetAllocationByQuantity(quantity); err == nil && cached != nil {
 			log.Printf("Using cached result for quantity %d", quantity)
@@ -79,88 +49,132 @@ func (a *Allocator) CalculatePacks(quantity int) (map[int]int, int, error) {
 		}
 	}
 
-	// Sort pack sizes in descending order for optimal calculation
-	sort.Sort(sort.Reverse(sort.IntSlice(a.packSizes)))
+	maxPackSize := a.packSizes[0]
+	maxPossibleWaste := maxPackSize * 1000000 // arbitrarily large upper bound
 
-	// Initialize variables to track the best solution
-	bestPacks := make(map[int]int)
-	bestTotal := 0
-	bestWaste := -1
-	bestPackCount := -1
-
-	// Try different combinations of pack sizes
-	for i := 0; i < len(a.packSizes); i++ {
-		remaining := quantity
-		currentPacks := make(map[int]int)
-		currentTotal := 0
-
-		// Start with the current pack size
-		for j := i; j < len(a.packSizes); j++ {
-			size := a.packSizes[j]
-			if remaining <= 0 {
-				break
-			}
-
-			// Calculate how many packs of this size we need
-			numPacks := (remaining + size - 1) / size
-			currentPacks[size] = numPacks
-			currentTotal += size * numPacks
-			remaining -= size * numPacks
-		}
-
-		// Calculate waste (items over the order quantity)
-		waste := currentTotal - quantity
-		packCount := 0
-		for _, count := range currentPacks {
-			packCount += count
-		}
-
-		// Update best solution if:
-		// 1. This is the first valid solution, or
-		// 2. This solution has less waste, or
-		// 3. This solution has the same waste but fewer total packs
-		if bestWaste == -1 || waste < bestWaste || (waste == bestWaste && packCount < bestPackCount) {
-			bestPacks = currentPacks
-			bestTotal = currentTotal
-			bestWaste = waste
-			bestPackCount = packCount
-		}
+	best := struct {
+		packs     map[int]int
+		total     int
+		waste     int
+		packCount int
+		found     bool
+	}{
+		waste: maxPossibleWaste,
 	}
 
-	// Store the result if we have storage
+	a.findOptimal(quantity, 0, map[int]int{}, 0, 0, &best)
+
+	if !best.found {
+		return nil, 0, errors.New("no valid pack combination found")
+	}
+
 	if a.storage != nil {
-		if err := a.storage.StoreAllocation(quantity, bestPacks, bestTotal); err != nil {
+		if err := a.storage.StoreAllocation(quantity, best.packs, best.total); err != nil {
 			log.Printf("Failed to store allocation: %v", err)
 		}
 	}
 
-	return bestPacks, bestTotal, nil
+	return best.packs, best.total, nil
 }
 
-// findMinimumItems finds the minimum number of items needed to fulfill the order
-func (a *Allocator) findMinimumItems(orderQuantity int) int {
-	smallestPack := a.packSizes[len(a.packSizes)-1]
-
-	baseQuantity := (orderQuantity + smallestPack - 1) / smallestPack
-	baseItems := baseQuantity * smallestPack
-
-	for _, size := range a.packSizes {
-		if size <= orderQuantity {
-			continue
+// findOptimal is a helper function that finds the optimal pack distribution
+// for a given quantity using a recursive backtracking approach.
+func (a *Allocator) findOptimal(target, index int, current map[int]int, total, packCount int, best *struct {
+	packs     map[int]int
+	total     int
+	waste     int
+	packCount int
+	found     bool
+}) {
+	if total >= target {
+		waste := total - target
+		if !best.found || waste < best.waste || (waste == best.waste && packCount < best.packCount) {
+			best.found = true
+			best.total = total
+			best.waste = waste
+			best.packCount = packCount
+			best.packs = cloneMap(current)
 		}
+		return
+	}
 
-		if size < baseItems {
-			log.Printf("Using single pack of size %d for order %d (less overage)", size, orderQuantity)
-			return size
+	if index >= len(a.packSizes) {
+		return
+	}
+
+	size := a.packSizes[index]
+	maxQty := (target - total + size - 1) / size // minimal fill
+
+	for q := maxQty; q >= 0; q-- {
+		if q > 0 {
+			current[size] = q
+		} else {
+			delete(current, size)
+		}
+		a.findOptimal(target, index+1, current, total+q*size, packCount+q, best)
+	}
+}
+
+// GreedyWithCorrectionPacks computes an approximate pack distribution
+// using a greedy approach followed by local correction to reduce waste.
+func (a *Allocator) GreedyWithCorrectionPacks(quantity int) (map[int]int, int) {
+	packSizes := a.packSizes
+	packs := make(map[int]int)
+	total := 0
+	remaining := quantity
+
+	// Greedy phase: use as many large packs as possible
+	for _, size := range packSizes {
+		count := remaining / size
+		if count > 0 {
+			packs[size] = count
+			total += size * count
+			remaining -= size * count
 		}
 	}
 
-	return baseItems
+	// Add smallest pack if needed
+	if remaining > 0 {
+		smallest := packSizes[len(packSizes)-1]
+		packs[smallest]++
+		total += smallest
+	}
+
+	// Local correction phase
+	// Try replacing a small pack with a larger one that reduces waste
+	for i := len(packSizes) - 1; i > 0; i-- {
+		small := packSizes[i]
+		if packs[small] == 0 {
+			continue
+		}
+		for j := i - 1; j >= 0; j-- {
+			large := packSizes[j]
+			newTotal := total - small + large
+			if newTotal >= quantity && newTotal < total {
+				packs[small]--
+				if packs[small] == 0 {
+					delete(packs, small)
+				}
+				packs[large]++
+				total = newTotal
+				break
+			}
+		}
+	}
+
+	return packs, total
 }
 
-// GetRecentAllocations retrieves the most recent pack allocations from storage.
-// It returns up to the specified limit of allocations, ordered by creation time.
-// Returns an error if storage is not configured or if the retrieval fails.
+// cloneMap creates a deep copy of a map[int]int.
+func cloneMap(src map[int]int) map[int]int {
+	dst := make(map[int]int, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+// GetRecentAllocations retrieves the most recent allocations from the storage.
 func (a *Allocator) GetRecentAllocations(limit int) ([]storage.Allocation, error) {
 	if a.storage == nil {
 		return nil, ErrStorageNotConfigured
@@ -168,11 +182,96 @@ func (a *Allocator) GetRecentAllocations(limit int) ([]storage.Allocation, error
 	return a.storage.GetRecentAllocations(limit)
 }
 
-// Close closes the allocator's storage connection if one is configured.
-// It should be called when the allocator is no longer needed.
+// Close closes the storage.
 func (a *Allocator) Close() error {
 	if a.storage != nil {
 		return a.storage.Close()
 	}
 	return nil
+}
+
+// CalculatePacks calculates the optimal pack distribution for a given order quantity
+func (a *Allocator) CalculatePacks(orderQuantity int) (map[int]int, int, error) {
+	log.Printf("Calculating optimal packs for order quantity: %d", orderQuantity)
+	if orderQuantity <= 0 {
+		log.Printf("Order quantity <= 0, returning error")
+		return nil, 0, errors.New("quantity must be greater than 0")
+	}
+
+	if len(a.packSizes) == 0 {
+		log.Printf("No pack sizes configured")
+		return nil, 0, errors.New("no pack sizes configured")
+	}
+
+	// Initialize result map
+	result := make(map[int]int)
+
+	// Calculate the minimum number of packs needed for each pack size
+	minPacks := make(map[int]int)
+	for _, size := range a.packSizes {
+		minPacks[size] = (orderQuantity + size - 1) / size
+	}
+
+	// Find the best combination by trying different combinations
+	bestResult := make(map[int]int)
+	bestTotal := 0
+	bestOverage := orderQuantity
+
+	// Try combinations starting from the largest pack size
+	for _, size := range a.packSizes {
+		currentResult := make(map[int]int)
+		currentTotal := 0
+		remaining := orderQuantity
+
+		// Start with the maximum possible number of current pack size
+		maxPacks := minPacks[size]
+		for packs := maxPacks; packs >= 0; packs-- {
+			currentResult[size] = packs
+			currentTotal = packs * size
+			remaining = orderQuantity - currentTotal
+
+			// If we've met or exceeded the order quantity, check if this is better
+			if remaining <= 0 {
+				overage := -remaining
+				if overage < bestOverage || (overage == bestOverage && currentTotal < bestTotal) {
+					bestResult = make(map[int]int)
+					for k, v := range currentResult {
+						bestResult[k] = v
+					}
+					bestTotal = currentTotal
+					bestOverage = overage
+				}
+				continue
+			}
+
+			// Try to fill the remaining quantity with smaller packs
+			for _, smallerSize := range a.packSizes {
+				if smallerSize >= size {
+					continue
+				}
+				smallerPacks := (remaining + smallerSize - 1) / smallerSize
+				currentResult[smallerSize] = smallerPacks
+				currentTotal += smallerPacks * smallerSize
+				overage := currentTotal - orderQuantity
+
+				if overage < bestOverage || (overage == bestOverage && currentTotal < bestTotal) {
+					bestResult = make(map[int]int)
+					for k, v := range currentResult {
+						bestResult[k] = v
+					}
+					bestTotal = currentTotal
+					bestOverage = overage
+				}
+			}
+		}
+	}
+
+	// Copy the best result to the final result
+	for k, v := range bestResult {
+		if v > 0 {
+			result[k] = v
+		}
+	}
+
+	return result, bestTotal, nil
 }

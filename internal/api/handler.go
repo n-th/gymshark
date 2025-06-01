@@ -4,8 +4,10 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/n-th/gymshark/internal/allocator"
@@ -35,6 +37,19 @@ func NewHandler(allocator *allocator.Allocator) *Handler {
 //   - GET /health - Health check endpoint
 //   - GET /swagger/*any - Swagger documentation
 func (h *Handler) RegisterRoutes(router *gin.Engine) {
+	// CORS middleware
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "http://localhost:3000")
+		c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Content-Type")
+
+		if c.Request.Method == http.MethodOptions {
+			c.Status(http.StatusOK)
+			c.Abort()
+			return
+		}
+	})
+
 	// API routes
 	router.GET("/calculate", h.calculatePacks)
 	router.GET("/recent", h.getRecentAllocations)
@@ -56,38 +71,49 @@ func (h *Handler) RegisterRoutes(router *gin.Engine) {
 // @Failure 400 {object} map[string]string "Error message"
 // @Router /calculate [get]
 func (h *Handler) calculatePacks(c *gin.Context) {
-	// Add CORS headers
-	c.Header("Access-Control-Allow-Origin", "http://localhost:3000")
-	c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-	c.Header("Access-Control-Allow-Headers", "Content-Type")
-
-	// Handle preflight requests
-	if c.Request.Method == http.MethodOptions {
-		c.Status(http.StatusOK)
-		return
-	}
-
 	quantityStr := c.Query("quantity")
 	quantity, err := strconv.Atoi(quantityStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid quantity: " + err.Error(),
-		})
+	if err != nil || quantity <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quantity"})
 		return
 	}
+
+	type allocationResult struct {
+		Packs map[int]int
+		Total int
+		Err   error
+	}
+
+	resultChan := make(chan allocationResult, 1)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Minute)
+	defer cancel()
+
+	// const maxExactQuantity = 10000
+
+	// if quantity >= maxExactQuantity {
+	// 	packs, total := h.allocator.GreedyWithCorrectionPacks(quantity)
+	// 	resultChan <- allocationResult{packs, total, err}
+	// } else {
+	// 	packs, total, err := h.allocator.CalculatePacksOptimized(quantity)
+	// 	resultChan <- allocationResult{packs, total, err}
+	// }
 
 	packs, total, err := h.allocator.CalculatePacks(quantity)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
-		return
-	}
+	resultChan <- allocationResult{packs, total, err}
 
-	c.JSON(http.StatusOK, gin.H{
-		"packs": packs,
-		"total": total,
-	})
+	select {
+	case <-ctx.Done():
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "calculation timeout"})
+	case result := <-resultChan:
+		if result.Err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": result.Err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"packs": result.Packs,
+			"total": result.Total,
+		})
+	}
 }
 
 // @Summary Get recent allocations

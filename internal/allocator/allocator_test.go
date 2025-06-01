@@ -56,8 +56,8 @@ func TestCalculatePacks(t *testing.T) {
 		{
 			name:          "valid quantity",
 			quantity:      50,
-			expectedPacks: map[int]int{31: 1, 23: 1},
-			expectedTotal: 54,
+			expectedPacks: map[int]int{53: 1},
+			expectedTotal: 53,
 			expectedError: false,
 		},
 		{

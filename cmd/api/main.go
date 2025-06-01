@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -39,6 +41,19 @@ func loadConfig(path string) (*Config, error) {
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, err
 	}
+
+	// Validate pack sizes
+	if len(cfg.PackSizes) == 0 {
+		return nil, errors.New("no pack sizes configured")
+	}
+
+	// Validate that all pack sizes are positive
+	for i, size := range cfg.PackSizes {
+		if size <= 0 {
+			return nil, fmt.Errorf("invalid pack size at index %d: %d (must be positive)", i, size)
+		}
+	}
+
 	log.Printf("Loaded config: pack_sizes=%v, server.host=%s, server.port=%d", cfg.PackSizes, cfg.Server.Host, cfg.Server.Port)
 	return &cfg, nil
 }
@@ -65,8 +80,13 @@ func main() {
 	}
 	defer store.Close()
 
+	cfg, err := loadConfig("config/config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
 	// Initialize allocator with storage
-	alloc := allocator.NewAllocator([]int{23, 31, 53}, store)
+	alloc := allocator.NewAllocator(cfg.PackSizes, store)
 	defer alloc.Close()
 
 	// Create a new Gin router

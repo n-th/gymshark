@@ -1,8 +1,8 @@
-# 🧠 Smart Pack Allocation API
+# Smart Pack Allocation API
 
 A Go-based API service that calculates optimal pack distribution for fulfilling orders with fixed pack sizes.
 
-## 🚀 Features
+## Features
 
 - RESTful API for pack allocation calculations
 - Configurable pack sizes
@@ -12,13 +12,14 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
 - API documentation with Swagger
 - Detailed code documentation with godoc
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 - Go 1.22 or later
 - Docker and Docker Compose (for containerized deployment)
+- Npm 9.5.1 or later
 - Make (for development commands)
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 .
@@ -33,6 +34,7 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
 ├── config/           # Configuration files
 ├── Dockerfile        # Container definition
 ├── docker-compose.yml # Local development setup
+├── frontend/        # Frontend
 ├── Makefile         # Development commands
 └── README.md        # This file
 ```
@@ -68,7 +70,7 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
    docker-compose up --build
    ```
 
-## 📝 API Usage
+## API Usage
 
 ### Calculate Pack Distribution
 
@@ -81,10 +83,11 @@ Example Response:
 ```json
 {
     "packs": {
-        "23": 2,
-        "31": 7,
-        "53": 9429
-    }
+        "23": 37,
+        "31": 29,
+        "53": 9417
+    },
+    "total": 500000
 }
 ```
 
@@ -126,7 +129,7 @@ Example Response:
 }
 ```
 
-## 📚 Documentation
+## Documentation
 
 ### API Documentation (Swagger)
 
@@ -138,7 +141,7 @@ make swagger
 
 The Swagger UI will be available at <http://localhost:8080/swagger/index.html>
 
-## 🛠️ Development Commands
+## Development Commands
 
 The project includes several Make commands to help with development:
 
@@ -154,7 +157,7 @@ make deps         # Install development dependencies
 make help         # Show all available commands
 ```
 
-## 🧪 Testing
+## Testing
 
 Run the test suite:
 
@@ -162,7 +165,7 @@ Run the test suite:
 make test
 ```
 
-## 📦 Configuration
+## Configuration
 
 Pack sizes can be configured in `config/config.yaml`:
 
@@ -182,6 +185,40 @@ The service handles various edge cases:
 - Large orders requiring multiple pack combinations
 - Exact pack size matches
 
-## 📄 License
+## Frontend
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+The project includes a React-based frontend for interacting with the API.
+
+### Running the Frontend Locally
+
+1. Navigate to the frontend directory:
+
+   ```bash
+   cd frontend
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+The frontend will be available at <http://localhost:3000>
+
+### Note on Docker Support
+
+Tried to run both in docker, but got some errors in the package.json, so decided I already spent too much time on the challenge anyway, so I moved my attention to the main features.
+
+### Frontend Features
+
+- Real-time pack allocation calculations
+- Input validation
+- Responsive design
+- CORS support for local development
+- Error handling and user feedback

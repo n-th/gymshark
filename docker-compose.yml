@@ -1,3 +1,4 @@
+version: "3.8"
 services:
   api:
     build:
@@ -5,9 +6,29 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8080:8080"
-    volumes:
-      - ./config:/app/config
-      - ./data:/app/data
     environment:
-      - GIN_MODE=debug
-    restart: unless-stopped
+      - GIN_MODE=release
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ui:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - VITE_API_URL=http://localhost:8080
+  #   depends_on:
+  #     - api
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3000"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
