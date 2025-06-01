@@ -14,7 +14,7 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
 ## Prerequisites
 
 - Go 1.22 or later
-- Docker and Docker Compose (for containerized deployment)
+- Docker 27.4.0 and Docker Compose (for containerized deployment)
 - Npm 9.5.1 or later
 - Make (for development commands)
 
