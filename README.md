@@ -10,7 +10,6 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
 - Containerized deployment
 - Comprehensive test coverage
 - API documentation with Swagger
-- Detailed code documentation with godoc
 
 ## Prerequisites
 
@@ -39,7 +38,7 @@ A Go-based API service that calculates optimal pack distribution for fulfilling 
 └── README.md        # This file
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Local Development
 
