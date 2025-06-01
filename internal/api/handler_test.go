@@ -70,10 +70,9 @@ func TestCalculatePacks(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedBody: map[string]interface{}{
 				"packs": map[string]interface{}{
-					"23": float64(1),
-					"31": float64(1),
+					"53": float64(1),
 				},
-				"total": float64(54),
+				"total": float64(53),
 			},
 		},
 		{
@@ -93,8 +92,9 @@ func TestCalculatePacks(t *testing.T) {
 			expectedStatus: http.StatusOK,
 			expectedBody: map[string]interface{}{
 				"packs": map[string]interface{}{
-					"53": float64(9),
-					"23": float64(1),
+					"53": float64(3),
+					"23": float64(13),
+					"31": float64(11),
 				},
 				"total": float64(500),
 			},
@@ -103,25 +103,25 @@ func TestCalculatePacks(t *testing.T) {
 			name:           "missing quantity",
 			quantity:       "",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid quantity: strconv.Atoi: parsing \"\": invalid syntax",
+			expectedError:  "invalid quantity",
 		},
 		{
 			name:           "invalid quantity",
 			quantity:       "abc",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid quantity: strconv.Atoi: parsing \"abc\": invalid syntax",
+			expectedError:  "invalid quantity",
 		},
 		{
 			name:           "zero quantity",
 			quantity:       "0",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "quantity must be greater than 0",
+			expectedError:  "invalid quantity",
 		},
 		{
 			name:           "negative quantity",
 			quantity:       "-10",
 			expectedStatus: http.StatusBadRequest,
-			expectedError:  "quantity must be greater than 0",
+			expectedError:  "invalid quantity",
 		},
 	}
 

@@ -18,7 +18,6 @@ test:
 lint:
 	golangci-lint run --config .golangci.yml ./...
 
-
 # Clean build artifacts
 clean:
 	rm -rf bin/
@@ -64,9 +63,9 @@ help:
 	@echo "Available commands:"
 	@echo "  make build        - Build the application"
 	@echo "  make test         - Run tests"
-	@echo "  make lint         - Run linter"
+	@echo "  make lint         - Run linter - not available"
 	@echo "  make clean        - Clean build artifacts"
-	@echo "  make docs         - Generate godoc documentation"
+	@echo "  make docs         - Generate godoc documentation - not available"
 	@echo "  make swagger      - Generate Swagger documentation"
 	@echo "  make run          - Run the application"
 	@echo "  make docker-build - Build Docker image"

@@ -82,7 +82,15 @@ func main() {
 
 	cfg, err := loadConfig("config/config.yaml")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Printf("Failed to load config: %v", err)
+		log.Printf("Using default config")
+		cfg = &Config{
+			PackSizes: []int{1, 2, 3},
+			Server: struct {
+				Port int    `yaml:"port"`
+				Host string `yaml:"host"`
+			}{Port: 8080, Host: "0.0.0.0"},
+		}
 	}
 
 	// Initialize allocator with storage
@@ -100,7 +108,7 @@ func main() {
 
 	// Create a new HTTP server
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler: router,
 	}
 

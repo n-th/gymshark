@@ -175,7 +175,7 @@ pack_sizes:
   - 53
 ```
 
-## 🎯 Edge Cases
+## Edge Cases
 
 The service handles various edge cases:
 

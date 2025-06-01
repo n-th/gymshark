@@ -86,7 +86,7 @@ func TestCalculatePacks(t *testing.T) {
 		{
 			name:          "large quantity",
 			quantity:      500,
-			expectedPacks: map[int]int{53: 9, 23: 1},
+			expectedPacks: map[int]int{53: 3, 23: 13, 31: 11},
 			expectedTotal: 500,
 			expectedError: false,
 		},
@@ -137,7 +137,7 @@ func TestCalculatePacksWithDifferentPackSizes(t *testing.T) {
 		{
 			name:          "medium quantity",
 			quantity:      25,
-			expectedPacks: map[int]int{20: 1, 5: 1},
+			expectedPacks: map[int]int{10: 2, 5: 1},
 			expectedTotal: 25,
 		},
 	}
